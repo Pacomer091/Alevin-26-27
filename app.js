@@ -373,6 +373,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
   deferredPrompt = e;
   const btn = document.getElementById('pwa-install-btn');
   if (btn) btn.classList.remove('hidden');
+  const btnMob = document.getElementById('pwa-install-btn-mobile');
+  if (btnMob) btnMob.classList.remove('hidden');
 });
 
 function installPWA() {
@@ -382,6 +384,8 @@ function installPWA() {
       if (choice.outcome === 'accepted') {
         const btn = document.getElementById('pwa-install-btn');
         if (btn) btn.classList.add('hidden');
+        const btnMob = document.getElementById('pwa-install-btn-mobile');
+        if (btnMob) btnMob.classList.add('hidden');
       }
       deferredPrompt = null;
     });
@@ -1523,6 +1527,15 @@ function updateUnavailCount() {
   const unavails = squad.filter(p => p.isAvailable === false).length;
   const headerCount = document.getElementById('unavail-count-header');
   if (headerCount) headerCount.innerText = unavails;
+  const mobileCount = document.getElementById('mobile-unavail-badge');
+  if (mobileCount) {
+    mobileCount.innerText = unavails;
+    if (unavails > 0) {
+      mobileCount.classList.remove('hidden');
+    } else {
+      mobileCount.classList.add('hidden');
+    }
+  }
 }
 
 function renderAttendanceList() {
@@ -1678,21 +1691,31 @@ function switchMainView(view) {
   currentMainView = view;
   const tabMatch = document.getElementById('tab-match');
   const tabSquad = document.getElementById('tab-squad');
+  const mobTabMatch = document.getElementById('mobile-tab-match');
+  const mobTabSquad = document.getElementById('mobile-tab-squad');
   const viewMatch = document.getElementById('view-match');
   const viewSquad = document.getElementById('view-squad');
 
   if (view === 'match') {
-    tabMatch.className = 'tab-btn active px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition';
-    tabSquad.className = 'tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition';
-    viewMatch.classList.remove('hidden');
-    viewSquad.classList.add('hidden');
+    if (tabMatch) tabMatch.className = 'tab-btn active px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition';
+    if (tabSquad) tabSquad.className = 'tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition';
+
+    if (mobTabMatch) mobTabMatch.className = 'flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-blue-400 bg-blue-500/10 font-bold transition active:scale-95';
+    if (mobTabSquad) mobTabSquad.className = 'flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-slate-400 hover:text-white transition active:scale-95';
+
+    if (viewMatch) viewMatch.classList.remove('hidden');
+    if (viewSquad) viewSquad.classList.add('hidden');
     renderTacticsBoard();
     renderLiveBench();
   } else {
-    tabSquad.className = 'tab-btn active px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition';
-    tabMatch.className = 'tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition';
-    viewSquad.classList.remove('hidden');
-    viewMatch.classList.add('hidden');
+    if (tabSquad) tabSquad.className = 'tab-btn active px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition';
+    if (tabMatch) tabMatch.className = 'tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition';
+
+    if (mobTabSquad) mobTabSquad.className = 'flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-blue-400 bg-blue-500/10 font-bold transition active:scale-95';
+    if (mobTabMatch) mobTabMatch.className = 'flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-slate-400 hover:text-white transition active:scale-95';
+
+    if (viewSquad) viewSquad.classList.remove('hidden');
+    if (viewMatch) viewMatch.classList.add('hidden');
     renderSquadTable();
   }
   if (window.lucide) lucide.createIcons();

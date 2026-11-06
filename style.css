@@ -1,5 +1,16 @@
 /* Estilos personalizados para Míster Manager F7 (Estilo Football Manager) */
 
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100vw;
+  width: 100%;
+}
+
+/* Soporte para barra inferior cómoda en móviles */
+.safe-area-bottom {
+  padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+}
+
 :root {
   --fm-green-high: #2ea043;
   --fm-blue-elite: #38bdf8;
