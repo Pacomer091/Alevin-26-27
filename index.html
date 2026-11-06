@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Míster Manager F7 - Alevín 26/27</title>
+  
+  <!-- PWA Meta Tags & Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#141a24">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Míster F7">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js para el radar pentagonal de atributos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            fm: {
+              dark: '#0b0e14',
+              card: '#141a24',
+              cardHover: '#1c2433',
+              border: '#232e42',
+              accent: '#3b82f6',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['"Chakra Petch"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#090c10] text-slate-100 min-h-screen font-sans flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+
+  <!-- TOP HEADER -->
+  <header class="bg-fm-card/95 backdrop-blur-md border-b border-fm-border sticky top-0 z-40 px-3 sm:px-6 py-2.5">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+      
+      <!-- Brand & Mode -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/20 text-white font-bold text-lg font-display">
+          ⚽
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h1 class="font-display font-extrabold text-base sm:text-lg tracking-wide text-white">MÍSTER MANAGER F7</h1>
+            <span class="px-1.5 py-0.2 text-[10px] font-bold rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">ALEVÍN 26/27</span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Control de Partido en Vivo, Pizarra F7 y Minutos</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Actions -->
+      <div class="flex items-center gap-2">
+        
+        <!-- PWA Install Button (aparece si el navegador lo permite) -->
+        <button id="pwa-install-btn" onclick="installPWA()" class="hidden px-2.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 animate-pulse" title="Descargar como App móvil o PC">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span class="hidden md:inline">Instalar App</span>
+        </button>
+
+        <!-- Main View Switcher -->
+        <div class="flex bg-slate-900/90 p-1 rounded-xl border border-fm-border text-xs font-semibold">
+          <button id="tab-match" onclick="switchMainView('match')" class="tab-btn active px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+            <i data-lucide="timer" class="w-3.5 h-3.5"></i>
+            <span>Partido en Vivo</span>
+          </button>
+          <button id="tab-squad" onclick="switchMainView('squad')" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+            <i data-lucide="users" class="w-3.5 h-3.5"></i>
+            <span>Plantilla (<span id="player-count">15</span>)</span>
+          </button>
+        </div>
+
+        <!-- WhatsApp Quick Share -->
+        <button onclick="copyMatchSummaryForWhatsApp()" class="px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95" title="Copiar resumen del partido para WhatsApp">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">WhatsApp</span>
+        </button>
+
+        <!-- Convocatoria / Bajas button -->
+        <button onclick="openAttendanceModal()" class="px-2.5 sm:px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95" title="Gestionar asistencia y no disponibles">
+          <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
+          <span class="hidden md:inline">Bajas (<span id="unavail-count-header">0</span>)</span>
+        </button>
+
+        <!-- Nuevo Partido button -->
+        <button onclick="openNewMatchModal()" class="px-2.5 sm:px-3 py-1.5 bg-rose-600/90 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 border border-rose-500/30" title="Iniciar un nuevo partido y reiniciar todo">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <span class="hidden lg:inline">Nuevo Partido</span>
+        </button>
+
+        <!-- Settings -->
+        <button onclick="toggleSettingsMenu()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl border border-fm-border transition" title="Datos y Copias de Seguridad">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Settings / Backup Modal -->
+  <div id="settings-menu" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+      <button onclick="toggleSettingsMenu()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <h3 class="text-base font-bold text-white mb-2 flex items-center gap-2">
+        <i data-lucide="database" class="w-5 h-5 text-blue-400"></i>
+        Gestión de Datos y Copias
+      </h3>
+      <p class="text-xs text-slate-400 mb-5">Tus jugadores se guardan de forma automática en este navegador. Puedes exportar o importar copias en cualquier momento.</p>
+      
+      <div class="space-y-3">
+        <button onclick="exportData()" class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-between border border-fm-border transition">
+          <span class="flex items-center gap-2">
+            <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+            Descargar Copia de Seguridad (JSON)
+          </span>
+          <span class="text-[10px] text-slate-500">Guardar archivo</span>
+        </button>
+
+        <label class="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-between border border-fm-border cursor-pointer transition">
+          <span class="flex items-center gap-2">
+            <i data-lucide="upload" class="w-4 h-4 text-blue-400"></i>
+            Cargar Copia de Seguridad
+          </span>
+          <span class="text-[10px] text-slate-500">Subir archivo</span>
+          <input type="file" id="import-file" accept=".json" class="hidden" onchange="importData(event)">
+        </label>
+
+        <button onclick="restoreSampleData()" class="w-full py-2.5 px-4 bg-amber-950/20 hover:bg-amber-900/30 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-between border border-amber-800/40 transition">
+          <span class="flex items-center gap-2">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            Restaurar 15 Jugadores Reales
+          </span>
+          <span class="text-[10px] text-amber-500">Alevín 26/27</span>
+        </button>
+
+        <button onclick="clearAllData()" class="w-full py-2.5 px-4 bg-rose-950/20 hover:bg-rose-900/30 text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between border border-rose-800/30 transition">
+          <span class="flex items-center gap-2">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            Vaciar toda la plantilla
+          </span>
+          <span class="text-[10px] text-rose-500">Reset</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN VIEW: PARTIDO EN VIVO (LA WEB EN SÍ) -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 space-y-4">
+
+    <!-- SECCIÓN 1: VISTA DE PARTIDO EN VIVO (POR DEFECTO) -->
+    <section id="view-match" class="space-y-4">
+      
+      <!-- Live Match Command Bar (Cronómetro, Período, Marcador y Formación) -->
+      <div class="bg-fm-card border border-fm-border rounded-2xl p-3 sm:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+        
+        <!-- Bloque Cronómetro y Período -->
+        <div class="flex items-center gap-3">
+          <div class="text-center bg-black/60 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+            <div class="flex items-center justify-between gap-2 mb-0.5">
+              <span id="match-period-badge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">1ª PARTE</span>
+            </div>
+            <div id="match-timer-display" class="font-display font-black text-2xl sm:text-3xl text-amber-400 leading-none">00:00</div>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button id="btn-match-start" onclick="toggleMatchTimer()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/20 active:scale-95">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              <span id="match-btn-text">Iniciar 1T</span>
+            </button>
+
+            <button onclick="changeMatchPeriod()" id="btn-next-period" class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-fm-border transition" title="Pasar al Descanso o 2ª Parte">
+              <i data-lucide="skip-forward" class="w-3.5 h-3.5"></i>
+            </button>
+
+            <button onclick="openNewMatchModal()" class="px-2.5 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white rounded-xl border border-rose-800/50 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm" title="Iniciar Nuevo Partido (reiniciar cronómetro, marcador, minutos y eventos)">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-rose-400"></i>
+              <span class="hidden sm:inline">Nuevo Partido</span>
+            </button>
+
+            <button id="btn-sound-toggle" onclick="toggleSound()" class="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl border border-fm-border transition" title="Silbato de aviso a los 35m y 70m (Activado)">
+              <i data-lucide="volume-2" class="w-3.5 h-3.5 text-blue-400"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bloque Marcador en Directo -->
+        <div class="flex items-center gap-2 sm:gap-3 bg-black/50 px-3 py-1.5 rounded-xl border border-slate-800">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold text-white hidden sm:inline">Alevín</span>
+            <div class="flex items-center gap-1">
+              <button onclick="adjustScore('home', -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center justify-center">-</button>
+              <span id="score-home" class="font-display font-black text-xl text-blue-400 w-5 text-center">0</span>
+              <button onclick="adjustScore('home', 1)" class="w-5 h-5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center">+</button>
+            </div>
+          </div>
+
+          <span class="text-slate-500 font-bold">:</span>
+
+          <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1">
+              <button onclick="adjustScore('away', -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center justify-center">-</button>
+              <span id="score-away" class="font-display font-black text-xl text-rose-400 w-5 text-center">0</span>
+              <button onclick="adjustScore('away', 1)" class="w-5 h-5 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center justify-center">+</button>
+            </div>
+            <span class="text-xs font-bold text-slate-400 hidden sm:inline">Rival</span>
+          </div>
+
+          <button onclick="openGoalModal()" class="ml-1 px-2 py-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white rounded-lg text-xs font-bold border border-amber-500/30 transition flex items-center gap-1" title="Anotar gol y quién lo marcó">
+            <span>⚽</span>
+            <span class="hidden md:inline">Gol</span>
+          </button>
+        </div>
+
+        <!-- Bloque Formación y Controles Tácticos -->
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <select id="formation-select" onchange="changeFormation(this.value)" class="bg-slate-900 text-white font-semibold text-xs border border-fm-border rounded-xl px-3 py-2 pr-7 appearance-none focus:outline-none focus:border-blue-500 cursor-pointer">
+              <option value="1-3-2-1">1-3-2-1 (Árbol)</option>
+              <option value="1-2-3-1">1-2-3-1 (Bandas)</option>
+              <option value="1-3-1-2">1-3-1-2 (2 Puntas)</option>
+              <option value="1-2-2-2">1-2-2-2 (Cuadrado)</option>
+            </select>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none"></i>
+          </div>
+
+          <button onclick="autoFillLineup()" class="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-fm-border rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95" title="Alinear a los 7 mejores disponibles">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span class="hidden lg:inline">Óptima</span>
+          </button>
+
+          <button onclick="openAttendanceModal()" class="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-fm-border rounded-xl text-xs font-bold flex items-center gap-1" title="Marcar bajas / no disponibles">
+            <i data-lucide="user-check" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Convocatoria</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Live Match Arena: Pitch (7 Titulares con Minutos en Vivo) + Sidebar (Banquillo y Cambios) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Pizarra Gráfica Fútbol 7 (8 Cols) -->
+        <div class="lg:col-span-8 flex flex-col items-center">
+          <div class="w-full relative shadow-2xl rounded-3xl overflow-hidden border-2 border-emerald-950">
+            
+            <!-- Campo Césped Fútbol 7 -->
+            <div id="pitch" class="f7-pitch relative w-full aspect-[4/3] sm:aspect-[16/11] flex flex-col justify-between p-4 select-none">
+              
+              <!-- Líneas reglamentarias del campo F7 -->
+              <div class="pitch-line pitch-outer"></div>
+              <div class="pitch-line pitch-half"></div>
+              <div class="pitch-line pitch-center-circle"></div>
+              <div class="pitch-spot pitch-center-spot"></div>
+
+              <!-- Portería y Área Superior (Rival) -->
+              <div class="pitch-goal-top"></div>
+              <div class="pitch-area-top"></div>
+              <div class="pitch-spot pitch-penalty-top"></div>
+
+              <!-- Portería y Área Inferior (Nuestro Portero) -->
+              <div class="pitch-goal-bottom"></div>
+              <div class="pitch-area-bottom"></div>
+              <div class="pitch-spot pitch-penalty-bottom"></div>
+
+              <!-- Contenedor dinámico de jugadores en el campo con minutos en vivo -->
+              <div id="pitch-slots" class="absolute inset-0 pointer-events-none">
+                <!-- Generados con JS con minutos en directo -->
+              </div>
+            </div>
+
+            <!-- Pitch Legend Bar -->
+            <div class="bg-slate-950 px-4 py-2.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-900">
+              <span class="flex items-center gap-1.5 text-[11px]">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Arrastra jugadores <b>entre puestos o al banquillo</b> para rotar y hacer cambios (o toca para seleccionar)
+              </span>
+              <div class="flex items-center gap-3 text-[11px]">
+                <span>Media Titular: <b id="team-glr" class="text-blue-400 font-display">81</b></span>
+                <span>Titulares: <b id="titulares-count" class="text-white">7</b>/7</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar: Banquillo, Minutos de Suplentes, Cambios y Bajas (4 Cols) -->
+        <div class="lg:col-span-4 space-y-3">
+          
+          <!-- Banquillo de Suplentes con Contador de Minutos (Zona de Arrastre para retirar jugadores) -->
+          <div id="live-bench-container" 
+               ondragover="onBenchDragOver(event)" 
+               ondrop="onBenchDrop(event)" 
+               class="bench-dropzone bg-fm-card border border-fm-border rounded-2xl p-4 flex flex-col max-h-[560px] shadow-xl transition-all">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-fm-border">
+              <div>
+                <h3 class="font-display font-bold text-white text-sm flex items-center gap-2">
+                  <i data-lucide="armchair" class="w-4 h-4 text-amber-400"></i>
+                  Banquillo y Rotación
+                </h3>
+                <p class="text-[10px] text-slate-400">Suelta aquí para retirar al banquillo</p>
+              </div>
+              <span id="bench-count" class="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-900 text-emerald-400 border border-slate-800">0 disp.</span>
+            </div>
+
+            <!-- Lista de Suplentes Disponibles (Scrollable) -->
+            <div id="live-bench-list" class="flex-1 overflow-y-auto space-y-2 pt-3 pr-1">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Registro de Cambios / Goles del partido -->
+            <div class="pt-3 border-t border-fm-border mt-3">
+              <div class="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span class="flex items-center gap-1.5">
+                  <i data-lucide="history" class="w-3.5 h-3.5 text-blue-400"></i>
+                  Historial de Cambios y Goles
+                </span>
+                <span id="events-count" class="text-[10px] text-slate-500">0 eventos</span>
+              </div>
+              <div id="match-events-log" class="text-xs space-y-1 max-h-24 overflow-y-auto text-slate-400 pr-1">
+                <p class="text-[11px] italic text-slate-500">No se han registrado eventos todavía.</p>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- SECCIÓN 2: GESTIÓN DE PLANTILLA COMPLETA (FICHA, ATRIBUTOS Y EDICIÓN) -->
+    <section id="view-squad" class="space-y-4 hidden">
+      
+      <!-- Squad Filter & Search Header -->
+      <div class="bg-fm-card border border-fm-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none"></i>
+            <input type="text" id="squad-search" oninput="renderSquadTable()" placeholder="Buscar por nombre o dorsal..." class="bg-slate-900 border border-fm-border rounded-xl pl-9 pr-4 py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 w-full transition">
+          </div>
+
+          <div class="flex bg-slate-900 p-1 rounded-xl border border-fm-border text-xs font-semibold">
+            <button onclick="filterPosition('ALL')" class="pos-filter-btn active px-3 py-1.5 rounded-lg text-slate-300 transition" data-pos="ALL">Todos</button>
+            <button onclick="filterPosition('POR')" class="pos-filter-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition" data-pos="POR">POR</button>
+            <button onclick="filterPosition('DEF')" class="pos-filter-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition" data-pos="DEF">DEF</button>
+            <button onclick="filterPosition('MED')" class="pos-filter-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition" data-pos="MED">MED</button>
+            <button onclick="filterPosition('DEL')" class="pos-filter-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition" data-pos="DEL">DEL</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="openPlayerModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/20 transition active:scale-95">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Nuevo Jugador</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Squad Cards Grid -->
+      <div id="squad-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: NUEVO PARTIDO (REINICIAR TODO) -->
+  <div id="new-match-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-fm-card border border-rose-500/40 rounded-2xl w-full max-w-md p-5 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-fm-border mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-rose-600/20 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="font-display font-bold text-base text-white">Iniciar Nuevo Partido</h3>
+            <p class="text-[11px] text-slate-400">Reiniciar datos del encuentro</p>
+          </div>
+        </div>
+        <button onclick="closeNewMatchModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div class="bg-rose-950/20 border border-rose-800/40 rounded-xl p-3.5 text-rose-200 space-y-2">
+          <div class="font-bold flex items-center gap-1.5 text-rose-300 text-xs">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400 shrink-0"></i>
+            <span>¿Confirmas el inicio de un nuevo partido?</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Se reiniciarán a cero todos los registros del partido:
+          </p>
+          <ul class="list-disc list-inside text-[11px] text-slate-300 space-y-1 ml-1">
+            <li>⏱️ <b>Cronómetro:</b> Vuelve a 00:00 (1ª Parte - 35m)</li>
+            <li>⚽ <b>Marcador:</b> 0 - 0 (Alevín vs Rival)</li>
+            <li>📊 <b>Minutos jugados:</b> 0 min para todos los niños</li>
+            <li>📋 <b>Historial:</b> Se vacían los goles y cambios</li>
+          </ul>
+        </div>
+
+        <!-- Opciones del nuevo partido -->
+        <div class="space-y-2.5 bg-slate-900/80 p-3 rounded-xl border border-fm-border">
+          <label class="flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="reset-availables-checkbox" class="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700 focus:ring-0">
+            <span class="text-slate-200 font-medium text-xs">Habilitar a toda la plantilla (quitar bajas previas)</span>
+          </label>
+          <label class="flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="keep-lineup-checkbox" checked class="w-4 h-4 rounded text-blue-600 bg-slate-800 border-slate-700 focus:ring-0">
+            <span class="text-slate-200 font-medium text-xs">Mantener la alineación actual de 7 en el campo</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5 pt-4 mt-4 border-t border-fm-border">
+        <button onclick="closeNewMatchModal()" class="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition">
+          Cancelar
+        </button>
+        <button onclick="confirmStartNewMatch()" class="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-600/30 transition flex items-center justify-center gap-1.5 active:scale-95">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>Sí, Reiniciar Todo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONVOCATORIA Y NO DISPONIBLES (BAJAS) -->
+  <div id="attendance-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
+      
+      <div class="px-6 py-4 border-b border-fm-border bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center text-white font-bold text-lg font-display">
+            📋
+          </div>
+          <div>
+            <h3 class="font-display font-black text-lg text-white">Convocatoria y Bajas para el Partido</h3>
+            <p class="text-xs text-slate-400">Marca a los niños no disponibles (lesión, viaje, etc.) para excluirlos del partido.</p>
+          </div>
+        </div>
+        <button onclick="closeAttendanceModal()" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-fm-border">
+          <div class="text-xs text-slate-300">
+            Disponibles: <b id="modal-avail-count" class="text-emerald-400">15</b> • Bajas: <b id="modal-unavail-count" class="text-rose-400">0</b>
+          </div>
+          <button onclick="setAllAvailable(true)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition">
+            Poner todos disponibles
+          </button>
+        </div>
+
+        <div id="attendance-players-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-slate-900/80 border-t border-fm-border flex items-center justify-end">
+        <button onclick="closeAttendanceModal()" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition">
+          Guardar y Volver al Partido
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: SUSTITUCIÓN TÁCTIL (MÓVIL / TABLET) -->
+  <div id="substitute-picker-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-md p-5 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-fm-border mb-4">
+        <div>
+          <h3 class="font-display font-bold text-base text-white flex items-center gap-2">
+            <i data-lucide="repeat" class="w-4 h-4 text-amber-400"></i>
+            Realizar Cambio
+          </h3>
+          <p id="sub-picker-subtitle" class="text-xs text-slate-400">Sale: Jugador</p>
+        </div>
+        <button onclick="closeSubstitutePicker()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Selecciona qué suplente entra:</div>
+      
+      <div id="sub-picker-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ANOTAR GOL Y GOLEADOR -->
+  <div id="goal-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-md p-5 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-fm-border mb-4">
+        <h3 class="font-display font-bold text-base text-white flex items-center gap-2">
+          <span>⚽</span>
+          Anotar Gol para Alevín
+        </h3>
+        <button onclick="closeGoalModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">¿Quién marcó el gol?</label>
+          <select id="goal-scorer-select" class="w-full bg-slate-900 border border-fm-border rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-semibold cursor-pointer">
+            <!-- Rendered via JS -->
+          </select>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button onclick="closeGoalModal()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl border border-fm-border transition">
+            Cancelar
+          </button>
+          <button onclick="confirmGoal()" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition">
+            ¡Gol Marcado!
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CREAR / EDITAR JUGADOR -->
+  <div id="player-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-2xl my-6 shadow-2xl relative flex flex-col max-h-[92vh] overflow-hidden">
+      
+      <div class="px-6 py-4 border-b border-fm-border flex items-center justify-between bg-slate-900/60">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm font-display">
+            F7
+          </div>
+          <div>
+            <h3 id="modal-title" class="font-display font-bold text-base sm:text-lg text-white">Nuevo Jugador</h3>
+            <p class="text-xs text-slate-400">5 Atributos FM (1-100) y Posiciones de juego</p>
+          </div>
+        </div>
+        <button onclick="closePlayerModal()" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="player-form" onsubmit="savePlayer(event)" class="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1">
+        <input type="hidden" id="player-id">
+
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5 bg-slate-900/50 p-4 rounded-xl border border-slate-800/80">
+          <div class="sm:col-span-5">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Nombre y Apellidos *</label>
+            <input type="text" id="input-name" required placeholder="Ej: Marcos Gómez" class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+
+          <div class="sm:col-span-2">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Dorsal *</label>
+            <input type="number" id="input-number" min="1" max="99" required placeholder="7" class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 text-center font-bold font-display">
+          </div>
+
+          <div class="sm:col-span-5">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Posición Principal *</label>
+            <select id="input-pos" onchange="onPositionChanged(this.value)" class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 font-bold cursor-pointer">
+              <option value="POR">Portero (POR)</option>
+              <option value="DEF">Defensa (DEF)</option>
+              <option value="MED" selected>Centrocampista (MED)</option>
+              <option value="DEL">Delantero (DEL)</option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-12 pt-2 border-t border-slate-800">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2">Otras Posiciones:</label>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="POR" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">POR</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="DFC" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">DFC (Central)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="LD" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">LD (Lat. Der.)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="LI" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">LI (Lat. Izq.)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="MC" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">MC (Medio)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="MI" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">MI (Banda Izq.)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="MD" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">MD (Banda Der.)</span>
+              </label>
+              <label class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 rounded-lg border border-fm-border cursor-pointer hover:border-slate-600">
+                <input type="checkbox" value="DC" class="sec-pos-checkbox rounded bg-slate-800 text-blue-500">
+                <span class="font-semibold text-slate-300">DC (Punta)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="sm:col-span-6">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Pierna Hábil</label>
+            <select id="input-foot" class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500">
+              <option value="Diestro">Diestro</option>
+              <option value="Zurdo">Zurdo</option>
+              <option value="Ambidiestro">Ambidiestro</option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-6">
+            <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Rol / Estilo</label>
+            <input type="text" id="input-role" placeholder="Ej: Organizador, Marcador, Desborde..." class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <div class="bg-slate-900/50 p-4 rounded-xl border border-fm-border space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+              <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+              <h4 class="font-display font-bold text-sm tracking-wide text-white uppercase">Los 5 Atributos Football Manager (1 - 100)</h4>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Media:</span>
+              <span id="modal-glr-preview" class="font-display font-black text-xl px-2 py-0.5 rounded-lg bg-blue-600 text-white">70</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-200">Calidad</label>
+              <span id="val-calidad" class="fm-val font-display font-bold text-xs px-2 py-0.5 rounded">65</span>
+            </div>
+            <input type="range" id="input-calidad" min="1" max="100" value="65" oninput="updateAttrValue('calidad', this.value)" class="slider-fm w-full">
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-200">Talento</label>
+              <span id="val-talento" class="fm-val font-display font-bold text-xs px-2 py-0.5 rounded">65</span>
+            </div>
+            <input type="range" id="input-talento" min="1" max="100" value="65" oninput="updateAttrValue('talento', this.value)" class="slider-fm w-full">
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-200">Velocidad</label>
+              <span id="val-velocidad" class="fm-val font-display font-bold text-xs px-2 py-0.5 rounded">65</span>
+            </div>
+            <input type="range" id="input-velocidad" min="1" max="100" value="65" oninput="updateAttrValue('velocidad', this.value)" class="slider-fm w-full">
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-200">Potencia</label>
+              <span id="val-potencia" class="fm-val font-display font-bold text-xs px-2 py-0.5 rounded">65</span>
+            </div>
+            <input type="range" id="input-potencia" min="1" max="100" value="65" oninput="updateAttrValue('potencia', this.value)" class="slider-fm w-full">
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-200">Mental</label>
+              <span id="val-mental" class="fm-val font-display font-bold text-xs px-2 py-0.5 rounded">65</span>
+            </div>
+            <input type="range" id="input-mental" min="1" max="100" value="65" oninput="updateAttrValue('mental', this.value)" class="slider-fm w-full">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Notas del Entrenador</label>
+          <textarea id="input-notes" rows="2" placeholder="Observaciones técnicas o formativas..." class="w-full bg-slate-900 border border-fm-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"></textarea>
+        </div>
+
+        <div class="pt-3 border-t border-fm-border flex items-center justify-between">
+          <button type="button" onclick="closePlayerModal()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs sm:text-sm rounded-xl border border-fm-border transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-500/20 transition active:scale-95 flex items-center gap-2">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Guardar Jugador</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: FICHA DETALLADA / RADAR PENTAGONAL -->
+  <div id="profile-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-fm-card border border-fm-border rounded-2xl w-full max-w-4xl shadow-2xl relative overflow-hidden flex flex-col max-h-[94vh]">
+      
+      <div id="profile-header-bg" class="px-6 py-5 border-b border-fm-border bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div id="profile-avatar" class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-display font-black text-2xl sm:text-3xl shadow-xl border-2 border-blue-400/40">
+            10
+          </div>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h2 id="profile-name" class="font-display font-black text-xl sm:text-2xl text-white tracking-wide">Nombre</h2>
+              <span id="profile-pos" class="px-2.5 py-0.5 rounded text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">MED</span>
+            </div>
+            <p id="profile-meta" class="text-xs text-slate-400 mt-0.5">Dorsal 10 • Diestro</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <div class="text-[10px] uppercase font-bold text-slate-400">MEDIA (GLR)</div>
+            <div id="profile-glr" class="font-display font-black text-2xl sm:text-3xl text-emerald-400">82</div>
+          </div>
+          <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-5 bg-slate-900/60 p-4 rounded-xl border border-fm-border flex flex-col items-center justify-center">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Pentágono de Rendimiento</h4>
+            <div class="w-full max-w-[280px] aspect-square relative">
+              <canvas id="profile-radar"></canvas>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 space-y-3.5">
+            <div id="profile-attributes-list" class="space-y-2.5"></div>
+            <div class="bg-slate-900/40 p-3.5 rounded-xl border border-fm-border mt-3">
+              <div class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <i data-lucide="clipboard" class="w-3.5 h-3.5 text-blue-400"></i>
+                Observaciones del Entrenador
+              </div>
+              <p id="profile-notes" class="text-xs text-slate-400 italic">Sin observaciones todavía.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 bg-slate-900/60 border-t border-fm-border flex items-center justify-between">
+        <button id="profile-btn-edit" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+          <span>Editar Atributos</span>
+        </button>
+        <button onclick="closeProfileModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-fm-card/50 border-t border-fm-border py-3 px-6 text-center text-xs text-slate-500">
+    <p>Míster Manager F7 • Fútbol Base Alevín • Pizarra Táctica y Control de Minutos en Vivo</p>
+  </footer>
+
+  <!-- Floating Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 bg-slate-900/95 text-white border border-blue-500/50 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold transform translate-y-16 opacity-0 pointer-events-none transition-all duration-300">
+    <span id="toast-icon">⚽</span>
+    <span id="toast-message">Mensaje</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
