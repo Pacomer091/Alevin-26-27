@@ -8,49 +8,49 @@ const FORMATIONS = {
   '1-3-2-1': {
     name: '1-3-2-1 (Árbol de Navidad)',
     slots: [
-      { id: 'pos-1', role: 'POR', name: 'Portero', top: 86, left: 50 },
-      { id: 'pos-2', role: 'DEF', name: 'Lat. Izquierdo', top: 67, left: 20 },
-      { id: 'pos-3', role: 'DEF', name: 'Central', top: 70, left: 50 },
-      { id: 'pos-4', role: 'DEF', name: 'Lat. Derecho', top: 67, left: 80 },
-      { id: 'pos-5', role: 'MED', name: 'Medio Centro', top: 45, left: 34 },
-      { id: 'pos-6', role: 'MED', name: 'Medio Centro', top: 45, left: 66 },
-      { id: 'pos-7', role: 'DEL', name: 'Delantero', top: 22, left: 50 }
+      { id: 'pos-1', role: 'POR', name: 'Portero', top: 88, left: 50 },
+      { id: 'pos-2', role: 'DEF', name: 'Lat. Izquierdo', top: 69, left: 18 },
+      { id: 'pos-3', role: 'DEF', name: 'Central', top: 72, left: 50 },
+      { id: 'pos-4', role: 'DEF', name: 'Lat. Derecho', top: 69, left: 82 },
+      { id: 'pos-5', role: 'MED', name: 'Medio Centro', top: 45, left: 32 },
+      { id: 'pos-6', role: 'MED', name: 'Medio Centro', top: 45, left: 68 },
+      { id: 'pos-7', role: 'DEL', name: 'Delantero', top: 18, left: 50 }
     ]
   },
   '1-2-3-1': {
     name: '1-2-3-1 (Bandas Ofensivas)',
     slots: [
-      { id: 'pos-1', role: 'POR', name: 'Portero', top: 86, left: 50 },
-      { id: 'pos-2', role: 'DEF', name: 'Central Izq.', top: 68, left: 33 },
-      { id: 'pos-3', role: 'DEF', name: 'Central Der.', top: 68, left: 67 },
-      { id: 'pos-4', role: 'MED', name: 'Banda Izq.', top: 45, left: 18 },
-      { id: 'pos-5', role: 'MED', name: 'Organizador', top: 48, left: 50 },
-      { id: 'pos-6', role: 'MED', name: 'Banda Der.', top: 45, left: 82 },
-      { id: 'pos-7', role: 'DEL', name: 'Delantero', top: 22, left: 50 }
+      { id: 'pos-1', role: 'POR', name: 'Portero', top: 88, left: 50 },
+      { id: 'pos-2', role: 'DEF', name: 'Central Izq.', top: 70, left: 32 },
+      { id: 'pos-3', role: 'DEF', name: 'Central Der.', top: 70, left: 68 },
+      { id: 'pos-4', role: 'MED', name: 'Banda Izq.', top: 45, left: 16 },
+      { id: 'pos-5', role: 'MED', name: 'Organizador', top: 47, left: 50 },
+      { id: 'pos-6', role: 'MED', name: 'Banda Der.', top: 45, left: 84 },
+      { id: 'pos-7', role: 'DEL', name: 'Delantero', top: 18, left: 50 }
     ]
   },
   '1-3-1-2': {
     name: '1-3-1-2 (Doble Punta)',
     slots: [
-      { id: 'pos-1', role: 'POR', name: 'Portero', top: 86, left: 50 },
-      { id: 'pos-2', role: 'DEF', name: 'Lat. Izquierdo', top: 67, left: 20 },
-      { id: 'pos-3', role: 'DEF', name: 'Central', top: 70, left: 50 },
-      { id: 'pos-4', role: 'DEF', name: 'Lat. Derecho', top: 67, left: 80 },
+      { id: 'pos-1', role: 'POR', name: 'Portero', top: 88, left: 50 },
+      { id: 'pos-2', role: 'DEF', name: 'Lat. Izquierdo', top: 69, left: 18 },
+      { id: 'pos-3', role: 'DEF', name: 'Central', top: 72, left: 50 },
+      { id: 'pos-4', role: 'DEF', name: 'Lat. Derecho', top: 69, left: 82 },
       { id: 'pos-5', role: 'MED', name: 'Medio Centro', top: 46, left: 50 },
-      { id: 'pos-6', role: 'DEL', name: 'Punta Izq.', top: 23, left: 34 },
-      { id: 'pos-7', role: 'DEL', name: 'Punta Der.', top: 23, left: 66 }
+      { id: 'pos-6', role: 'DEL', name: 'Punta Izq.', top: 19, left: 32 },
+      { id: 'pos-7', role: 'DEL', name: 'Punta Der.', top: 19, left: 68 }
     ]
   },
   '1-2-2-2': {
     name: '1-2-2-2 (Cuadrado / Doble Pivote)',
     slots: [
-      { id: 'pos-1', role: 'POR', name: 'Portero', top: 86, left: 50 },
-      { id: 'pos-2', role: 'DEF', name: 'Defensa Izq.', top: 68, left: 32 },
-      { id: 'pos-3', role: 'DEF', name: 'Defensa Der.', top: 68, left: 68 },
+      { id: 'pos-1', role: 'POR', name: 'Portero', top: 88, left: 50 },
+      { id: 'pos-2', role: 'DEF', name: 'Defensa Izq.', top: 70, left: 32 },
+      { id: 'pos-3', role: 'DEF', name: 'Defensa Der.', top: 70, left: 68 },
       { id: 'pos-4', role: 'MED', name: 'Medio Izq.', top: 46, left: 32 },
       { id: 'pos-5', role: 'MED', name: 'Medio Der.', top: 46, left: 68 },
-      { id: 'pos-6', role: 'DEL', name: 'Delantero Izq.', top: 23, left: 35 },
-      { id: 'pos-7', role: 'DEL', name: 'Delantero Der.', top: 23, left: 65 }
+      { id: 'pos-6', role: 'DEL', name: 'Delantero Izq.', top: 19, left: 32 },
+      { id: 'pos-7', role: 'DEL', name: 'Delantero Der.', top: 19, left: 68 }
     ]
   }
 };
@@ -553,22 +553,22 @@ function renderTacticsBoard() {
              onclick="handlePlayerPitchClick('${player.id}', '${slot.id}')">
 
           <!-- Dorsal Circle con GLR Badge -->
-          <div class="relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-900 border-2 ${isPosMatch ? 'border-blue-400' : 'border-amber-400'} shadow-xl flex items-center justify-center overflow-hidden transition-transform">
-            <span class="font-display font-black text-xl sm:text-2xl text-white">${player.number}</span>
+          <div class="relative w-11 h-11 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-2xl bg-slate-900 border-2 ${isPosMatch ? 'border-blue-400' : 'border-amber-400'} shadow-xl flex items-center justify-center overflow-hidden transition-transform">
+            <span class="font-display font-black text-lg sm:text-xl md:text-2xl text-white">${player.number}</span>
             <div class="absolute bottom-0 inset-x-0 h-1.5 ${player.mainPos === 'POR' ? 'bg-amber-400' : player.mainPos === 'DEF' ? 'bg-emerald-400' : player.mainPos === 'MED' ? 'bg-blue-400' : 'bg-rose-400'}"></div>
           </div>
 
           <!-- GLR Pill superpuesto a la izquierda -->
-          <div class="absolute -top-2 -left-2 z-10 px-1.5 py-0.5 rounded-md font-display font-bold text-[11px] ${getFMBadgeClass(glr)} shadow-lg">
+          <div class="absolute -top-1.5 -left-1.5 z-10 px-1.5 py-0.2 rounded-md font-display font-bold text-[10px] sm:text-[11px] ${getFMBadgeClass(glr)} shadow-lg">
             ${glr}
           </div>
 
-          <!-- Nombre y Minutos en directo (Sin botón de cambio invasivo) -->
-          <div class="mt-1 bg-slate-950/90 border border-slate-700/80 px-2 py-0.5 rounded-md text-center max-w-[85px] sm:max-w-[100px] shadow-lg">
-            <div class="text-[11px] sm:text-xs font-bold text-white truncate">${player.name.split(' ')[0]}</div>
+          <!-- Nombre y Minutos en directo (Sin solapamiento) -->
+          <div class="mt-0.5 bg-slate-950/90 border border-slate-700/80 px-1.5 sm:px-2 py-0.5 rounded-md text-center max-w-[78px] sm:max-w-[95px] shadow-lg">
+            <div class="text-[10px] sm:text-xs font-bold text-white truncate">${player.name.split(' ')[0]}</div>
             
             <!-- CONTADOR DE MINUTOS EN DIRECTO -->
-            <div class="text-[10px] font-black font-display ${isMatchRunning ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} tracking-tight">
+            <div class="text-[9px] sm:text-[10px] font-black font-display ${isMatchRunning ? 'text-emerald-400 animate-pulse' : 'text-amber-400'} tracking-tight">
               ⏱️ ${mins}' ${String(secs).padStart(2, '0')}"
             </div>
           </div>
@@ -577,12 +577,12 @@ function renderTacticsBoard() {
     } else {
       // Slot Vacío en el campo (Dropzone para arrastrar o hacer tap)
       slotEl.innerHTML = `
-        <div class="pitch-slot-empty w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center cursor-pointer group"
+        <div class="pitch-slot-empty w-11 h-11 sm:w-13 sm:h-13 md:w-14 md:h-14 rounded-2xl flex flex-col items-center justify-center cursor-pointer group"
              onclick="handleEmptySlotClick('${slot.id}', '${slot.role}')">
-          <span class="text-xs font-bold text-slate-300 font-display">${slot.role}</span>
-          <span class="text-[9px] text-slate-400 group-hover:text-blue-300 font-semibold">+ Meter</span>
+          <span class="text-[11px] sm:text-xs font-bold text-slate-300 font-display">${slot.role}</span>
+          <span class="text-[8px] sm:text-[9px] text-slate-400 group-hover:text-blue-300 font-semibold">+ Meter</span>
         </div>
-        <div class="mt-1 bg-black/60 px-1.5 py-0.5 rounded text-[9px] font-semibold text-slate-300 text-center">
+        <div class="mt-0.5 bg-black/60 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-semibold text-slate-300 text-center">
           ${slot.name}
         </div>
       `;
