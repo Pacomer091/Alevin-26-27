@@ -349,6 +349,8 @@ let matchPeriod = '1T'; // '1T', 'DESC', '2T', 'FIN'
 let matchEvents = [];
 let scoreHome = 0;
 let scoreAway = 0;
+let lastTimerTickTimestamp = null; // Sincronización exacta con el reloj real / hora España
+let wakeLock = null; // Screen Wake Lock API (mantiene la pantalla encendida en móvil)
 
 // Estado de Sustitución Temporal
 let pendingOutPlayerId = null;
@@ -403,6 +405,27 @@ document.addEventListener('DOMContentLoaded', () => {
   updateTeamStats();
   updatePeriodBadge();
   updateUnavailCount();
+  updateTimerDisplay();
+
+  const scoreHomeEl = document.getElementById('score-home');
+  const scoreAwayEl = document.getElementById('score-away');
+  if (scoreHomeEl) scoreHomeEl.innerText = scoreHome;
+  if (scoreAwayEl) scoreAwayEl.innerText = scoreAway;
+
+  renderMatchEvents();
+
+  // Si el partido estaba en marcha, reactivar el contador continuo y el wake lock
+  if (isMatchRunning) {
+    const btn = document.getElementById('btn-match-start');
+    const btnText = document.getElementById('match-btn-text');
+    if (btn) btn.className = 'px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
+    if (btnText) btnText.innerText = 'Pausar';
+    requestWakeLock();
+    matchTimerInterval = setInterval(() => {
+      syncTimerWithClock();
+    }, 1000);
+  }
+
   if (window.lucide) {
     lucide.createIcons();
   }
@@ -412,12 +435,22 @@ function saveData() {
   localStorage.setItem('alevin_f7_real_players_v3', JSON.stringify(squad));
   localStorage.setItem('alevin_f7_formation', currentFormation);
   localStorage.setItem('alevin_f7_lineup', JSON.stringify(lineup));
+  localStorage.setItem('alevin_f7_match_state', JSON.stringify({
+    matchSeconds,
+    isMatchRunning,
+    matchPeriod,
+    scoreHome,
+    scoreAway,
+    matchEvents,
+    lastTimerTickTimestamp: isMatchRunning ? (lastTimerTickTimestamp || Date.now()) : null
+  }));
 }
 
 function loadData() {
   const savedPlayers = localStorage.getItem('alevin_f7_real_players_v3');
   const savedFormation = localStorage.getItem('alevin_f7_formation');
   const savedLineup = localStorage.getItem('alevin_f7_lineup');
+  const savedMatch = localStorage.getItem('alevin_f7_match_state');
 
   if (savedPlayers) {
     try {
@@ -469,6 +502,35 @@ function loadData() {
       'pos-6': 'p6',  // Enzo Pérez (78)
       'pos-7': 'p1'   // Adrián Montes (88)
     };
+  }
+
+  // Restaurar estado del partido y sincronizar con reloj real si el móvil estuvo apagado
+  if (savedMatch) {
+    try {
+      const ms = JSON.parse(savedMatch);
+      matchSeconds = ms.matchSeconds || 0;
+      matchPeriod = ms.matchPeriod || '1T';
+      scoreHome = ms.scoreHome || 0;
+      scoreAway = ms.scoreAway || 0;
+      matchEvents = ms.matchEvents || [];
+
+      if (ms.isMatchRunning && ms.lastTimerTickTimestamp) {
+        const passedSeconds = Math.floor((Date.now() - ms.lastTimerTickTimestamp) / 1000);
+        if (passedSeconds > 0) {
+          matchSeconds += passedSeconds;
+          const startingIds = Object.values(lineup);
+          squad.forEach(p => {
+            if (startingIds.includes(p.id) && p.isAvailable !== false) {
+              p.playedSeconds = (p.playedSeconds || 0) + passedSeconds;
+            }
+          });
+        }
+        isMatchRunning = true;
+        lastTimerTickTimestamp = Date.now();
+      }
+    } catch (e) {
+      console.warn("Error cargando estado de partido:", e);
+    }
   }
 }
 
@@ -1032,53 +1094,145 @@ function playRefereeWhistle(type = 'halftime') {
 }
 
 // ------------------------------------------
-// 10. CRONÓMETRO, PERÍODOS Y MARCADOR
+// 10. SCREEN WAKE LOCK & CRONÓMETRO CON TIMESTAMP (SIN PARONES AL APAGAR LA PANTALLA)
 // ------------------------------------------
+
+// Screen Wake Lock API: Mantiene la pantalla encendida para que el árbitro/entrenador no pierda el tiempo
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      if (!wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+        });
+      }
+    } catch (err) {
+      console.log('Wake Lock no disponible o permiso denegado:', err);
+    }
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release().then(() => {
+      wakeLock = null;
+    }).catch(() => {});
+  }
+}
+
+// Sincronización exacta con el reloj real (timestamp / hora España).
+// Si el móvil se bloquea, se apaga la pantalla o sales de la app,
+// al encender o volver se recuperan exactamente todos los segundos transcurridos.
+function syncTimerWithClock() {
+  if (!isMatchRunning) return;
+
+  const now = Date.now();
+  if (!lastTimerTickTimestamp) {
+    lastTimerTickTimestamp = now;
+    return;
+  }
+
+  const elapsedMs = now - lastTimerTickTimestamp;
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
+  if (elapsedSeconds <= 0) return;
+
+  const prevSeconds = matchSeconds;
+  const newSeconds = matchSeconds + elapsedSeconds;
+
+  // Silbato arbitral automático al minuto 35:00 (descanso) o 70:00 (final) si se cruzó en el lapso
+  const t35 = 35 * 60;
+  const t70 = 70 * 60;
+
+  if (matchPeriod === '1T' && prevSeconds < t35 && newSeconds >= t35) {
+    playRefereeWhistle('halftime');
+    showToast("⏱️ ¡Minuto 35:00 cumplido! Final de la 1ª Parte (Descanso)", "⏸️");
+    recordMatchEvent("⏱️ Min 35:00 cumplido (Fin 1ª Parte)");
+  } else if (matchPeriod === '2T' && prevSeconds < t70 && newSeconds >= t70) {
+    playRefereeWhistle('fulltime');
+    showToast("🏁 ¡Minuto 70:00 cumplido! Final del Partido (2x35m)", "🏁");
+    recordMatchEvent("🏁 Min 70:00 cumplido (Fin reglamentario)");
+  }
+
+  // Incrementar segundos de partido
+  matchSeconds = newSeconds;
+
+  // Incrementar segundos jugados solo a los titulares sobre el campo
+  const startingIds = Object.values(lineup);
+  squad.forEach(p => {
+    if (startingIds.includes(p.id) && p.isAvailable !== false) {
+      p.playedSeconds = (p.playedSeconds || 0) + elapsedSeconds;
+    }
+  });
+
+  // Avanzar timestamp exacto del reloj
+  lastTimerTickTimestamp += elapsedSeconds * 1000;
+
+  // Refrescar display y vistas
+  updateTimerDisplay();
+  renderTacticsBoard();
+  renderLiveBench();
+  saveData();
+}
+
+// Manejadores de ciclo de vida del móvil (pantalla apagada / cambio de app / segundo plano)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    if (isMatchRunning) {
+      syncTimerWithClock();
+      requestWakeLock();
+    }
+  } else {
+    if (isMatchRunning) {
+      syncTimerWithClock();
+      saveData();
+    }
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (isMatchRunning) syncTimerWithClock();
+});
+
+window.addEventListener('pageshow', () => {
+  if (isMatchRunning) {
+    syncTimerWithClock();
+    requestWakeLock();
+  }
+});
+
 function toggleMatchTimer() {
   const btn = document.getElementById('btn-match-start');
   const btnText = document.getElementById('match-btn-text');
 
   if (isMatchRunning) {
+    // Sincronizar un último cálculo antes de pausar
+    syncTimerWithClock();
     clearInterval(matchTimerInterval);
+    matchTimerInterval = null;
     isMatchRunning = false;
+    lastTimerTickTimestamp = null;
+    releaseWakeLock();
+
     if (btn) btn.className = 'px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
     if (btnText) btnText.innerText = 'Reanudar';
     renderTacticsBoard();
+    saveData();
   } else {
     getAudioContext(); // Desbloquear audio con el gesto del usuario
     isMatchRunning = true;
+    lastTimerTickTimestamp = Date.now();
+    requestWakeLock();
+
     if (btn) btn.className = 'px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
     if (btnText) btnText.innerText = 'Pausar';
 
     matchTimerInterval = setInterval(() => {
-      matchSeconds++;
-      updateTimerDisplay();
-
-      // Silbato arbitral automático al minuto 35:00 (descanso) o 70:00 (final)
-      if (matchPeriod === '1T' && matchSeconds === 35 * 60) {
-        playRefereeWhistle('halftime');
-        showToast("⏱️ ¡Minuto 35:00 cumplido! Final de la 1ª Parte (Descanso)", "⏸️");
-        recordMatchEvent("⏱️ Min 35:00 cumplido (Fin 1ª Parte)");
-      } else if (matchPeriod === '2T' && matchSeconds === 70 * 60) {
-        playRefereeWhistle('fulltime');
-        showToast("🏁 ¡Minuto 70:00 cumplido! Final del Partido (2x35m)", "🏁");
-        recordMatchEvent("🏁 Min 70:00 cumplido (Fin reglamentario)");
-      }
-
-      // Incrementar segundos jugados solo a los titulares sobre el campo
-      const startingIds = Object.values(lineup);
-      squad.forEach(p => {
-        if (startingIds.includes(p.id) && p.isAvailable !== false) {
-          p.playedSeconds = (p.playedSeconds || 0) + 1;
-        }
-      });
-
-      // Refrescar cada 2 segundos para no sobrecargar
-      if (matchSeconds % 2 === 0) {
-        renderTacticsBoard();
-        renderLiveBench();
-      }
+      syncTimerWithClock();
     }, 1000);
+
+    saveData();
   }
 
   if (window.lucide) lucide.createIcons();
@@ -1119,6 +1273,8 @@ function confirmStartNewMatch() {
   isMatchRunning = false;
   matchSeconds = 0;
   matchPeriod = '1T';
+  lastTimerTickTimestamp = null;
+  releaseWakeLock();
 
   // 2. Reiniciar marcador a 0 - 0
   scoreHome = 0;
@@ -1228,6 +1384,7 @@ function changeMatchPeriod() {
     }
   }
   updatePeriodBadge();
+  saveData();
 }
 
 function updatePeriodBadge() {
@@ -1272,6 +1429,7 @@ function adjustScore(team, delta) {
       recordMatchEvent(`⚽ Gol del rival (${scoreHome} - ${scoreAway})`);
     }
   }
+  saveData();
 }
 
 function openGoalModal() {
@@ -1318,6 +1476,7 @@ function recordMatchEvent(text) {
     text: text
   });
   renderMatchEvents();
+  saveData();
 }
 
 function renderMatchEvents() {
