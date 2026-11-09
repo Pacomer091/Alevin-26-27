@@ -193,11 +193,12 @@
           <div class="text-center bg-black/60 px-3.5 py-1.5 rounded-xl border border-slate-800 shadow-inner">
             <div class="flex items-center justify-between gap-2 mb-0.5">
               <span id="match-period-badge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">1ª PARTE</span>
+              <span id="match-start-time-badge" class="text-[9px] text-emerald-400 font-semibold hidden">Ini: --:--</span>
             </div>
             <div id="match-timer-display" class="font-display font-black text-2xl sm:text-3xl text-amber-400 leading-none">00:00</div>
-            <div class="text-[9px] text-slate-500 font-medium flex items-center justify-center gap-1 mt-0.5" title="Sincronizado con la hora real y pantalla siempre activa en móvil">
+            <div class="text-[9px] text-slate-400 font-medium flex items-center justify-center gap-1.5 mt-1" title="Sincronizado con la hora oficial de España">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Reloj Real</span>
+              <span>Hora: <b id="spain-clock-display" class="text-slate-200 font-display">--:--:--</b></span>
             </div>
           </div>
 
@@ -843,6 +844,6 @@
     <span id="toast-message">Mensaje</span>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

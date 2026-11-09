@@ -1,5 +1,5 @@
 // Service Worker para Míster Manager F7 PWA
-const CACHE_NAME = 'mister-f7-v1';
+const CACHE_NAME = 'mister-f7-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -11,7 +11,7 @@ const STATIC_ASSETS = [
   './icon-512.png'
 ];
 
-// Instalación: Precargar recursos estáticos
+// Instalación: Precargar recursos y forzar activación inmediata
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -21,13 +21,14 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// Activación: Limpieza de caches antiguos
+// Activación: Eliminar cualquier versión anterior de la caché
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('Eliminando caché antigua:', key);
             return caches.delete(key);
           }
         })
@@ -37,36 +38,24 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Estrategia de Fetch: Cache First con fallback de red
+// Estrategia de Fetch: Network First
+// Siempre consulta a la red primero si hay conexión para tener los cambios más recientes.
+// Si no hay conexión (en el campo de fútbol sin cobertura), usa la caché offline.
 self.addEventListener('fetch', (e) => {
-  // Ignorar peticiones no HTTP/HTTPS (ej. chrome-extension)
   if (!e.request.url.startsWith('http')) return;
 
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // En segundo plano intentamos actualizar la caché si hay red
-        fetch(e.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(e.request, networkResponse.clone());
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-
-      return fetch(e.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'opaque') {
-          return networkResponse;
-        }
+    fetch(e.request).then((networkResponse) => {
+      if (networkResponse && networkResponse.status === 200) {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(e.request, responseToCache);
         });
-        return networkResponse;
-      }).catch(() => {
-        // Si estamos sin conexión y piden la página principal
+      }
+      return networkResponse;
+    }).catch(() => {
+      return caches.match(e.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
         if (e.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
@@ -74,4 +63,3 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
-

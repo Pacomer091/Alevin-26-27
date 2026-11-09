@@ -341,16 +341,20 @@ let currentFilter = 'ALL';
 let radarChartInstance = null;
 let currentMainView = 'match'; // 'match' o 'squad'
 
-// Estado del Partido en Directo
+// Estado del Partido en Directo con Sincronización Real (Reloj de España)
 let matchTimerInterval = null;
-let matchSeconds = 0;
 let isMatchRunning = false;
 let matchPeriod = '1T'; // '1T', 'DESC', '2T', 'FIN'
+let matchPeriodStartTime = null; // Timestamp (Date.now()) cuando se pulsó Iniciar/Reanudar
+let matchAccumulatedSeconds = 0; // Segundos acumulados antes de la última reanudación
+let matchStartClockStr = ''; // Hora real de inicio (ej. 10:15)
+let whistlePlayed35 = false;
+let whistlePlayed70 = false;
 let matchEvents = [];
 let scoreHome = 0;
 let scoreAway = 0;
-let lastTimerTickTimestamp = null; // Sincronización exacta con el reloj real / hora España
-let wakeLock = null; // Screen Wake Lock API (mantiene la pantalla encendida en móvil)
+let wakeLock = null; // Screen Wake Lock API
+let silentAudioEl = null; // Audio keepalive para segundo plano real en móvil
 
 // Estado de Sustitución Temporal
 let pendingOutPlayerId = null;
@@ -364,7 +368,9 @@ let deferredPrompt = null;
 // ------------------------------------------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => {
+    navigator.serviceWorker.register('./sw.js?v=5').then((reg) => {
+      reg.update().catch(() => {});
+    }).catch((err) => {
       console.log('SW registration error:', err);
     });
   });
@@ -416,13 +422,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Si el partido estaba en marcha, reactivar el contador continuo y el wake lock
   if (isMatchRunning) {
+    const startingIds = Object.values(lineup);
+    squad.forEach(p => {
+      if (startingIds.includes(p.id) && p.isAvailable !== false) {
+        if (!p.activeOnPitchSince) {
+          p.activeOnPitchSince = matchPeriodStartTime || Date.now();
+        }
+      }
+    });
+
     const btn = document.getElementById('btn-match-start');
     const btnText = document.getElementById('match-btn-text');
     if (btn) btn.className = 'px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
     if (btnText) btnText.innerText = 'Pausar';
     requestWakeLock();
+    startBackgroundAudioKeepalive();
+    if (matchTimerInterval) clearInterval(matchTimerInterval);
     matchTimerInterval = setInterval(() => {
-      syncTimerWithClock();
+      updateTimerDisplay();
+      if (getMatchSeconds() % 2 === 0) {
+        renderTacticsBoard();
+        renderLiveBench();
+      }
     }, 1000);
   }
 
@@ -436,13 +457,16 @@ function saveData() {
   localStorage.setItem('alevin_f7_formation', currentFormation);
   localStorage.setItem('alevin_f7_lineup', JSON.stringify(lineup));
   localStorage.setItem('alevin_f7_match_state', JSON.stringify({
-    matchSeconds,
+    matchAccumulatedSeconds,
+    matchPeriodStartTime,
+    matchStartClockStr,
     isMatchRunning,
     matchPeriod,
+    whistlePlayed35,
+    whistlePlayed70,
     scoreHome,
     scoreAway,
-    matchEvents,
-    lastTimerTickTimestamp: isMatchRunning ? (lastTimerTickTimestamp || Date.now()) : null
+    matchEvents
   }));
 }
 
@@ -504,30 +528,20 @@ function loadData() {
     };
   }
 
-  // Restaurar estado del partido y sincronizar con reloj real si el móvil estuvo apagado
+  // Restaurar estado del partido
   if (savedMatch) {
     try {
       const ms = JSON.parse(savedMatch);
-      matchSeconds = ms.matchSeconds || 0;
+      matchAccumulatedSeconds = ms.matchAccumulatedSeconds || 0;
+      matchPeriodStartTime = ms.matchPeriodStartTime || null;
+      matchStartClockStr = ms.matchStartClockStr || '';
+      isMatchRunning = ms.isMatchRunning || false;
       matchPeriod = ms.matchPeriod || '1T';
+      whistlePlayed35 = ms.whistlePlayed35 || false;
+      whistlePlayed70 = ms.whistlePlayed70 || false;
       scoreHome = ms.scoreHome || 0;
       scoreAway = ms.scoreAway || 0;
       matchEvents = ms.matchEvents || [];
-
-      if (ms.isMatchRunning && ms.lastTimerTickTimestamp) {
-        const passedSeconds = Math.floor((Date.now() - ms.lastTimerTickTimestamp) / 1000);
-        if (passedSeconds > 0) {
-          matchSeconds += passedSeconds;
-          const startingIds = Object.values(lineup);
-          squad.forEach(p => {
-            if (startingIds.includes(p.id) && p.isAvailable !== false) {
-              p.playedSeconds = (p.playedSeconds || 0) + passedSeconds;
-            }
-          });
-        }
-        isMatchRunning = true;
-        lastTimerTickTimestamp = Date.now();
-      }
     } catch (e) {
       console.warn("Error cargando estado de partido:", e);
     }
@@ -608,8 +622,9 @@ function renderTacticsBoard() {
     if (player) {
       const glr = calculateGLR(player);
       const isPosMatch = player.mainPos === slot.role || (player.secPositions && player.secPositions.includes(slot.role));
-      const mins = Math.floor((player.playedSeconds || 0) / 60);
-      const secs = (player.playedSeconds || 0) % 60;
+      const playerSecs = getPlayerPlayedSeconds(player);
+      const mins = Math.floor(playerSecs / 60);
+      const secs = playerSecs % 60;
       const isSelected = (selectedPlayerId === player.id);
 
       slotEl.innerHTML = `
@@ -687,12 +702,13 @@ function renderLiveBench() {
   }
 
   // Ordenar suplentes: primero los que llevan MENOS minutos para favorecer reparto equitativo
-  benchPlayers.sort((a, b) => (a.playedSeconds || 0) - (b.playedSeconds || 0));
+  benchPlayers.sort((a, b) => getPlayerPlayedSeconds(a) - getPlayerPlayedSeconds(b));
 
   benchPlayers.forEach((player, idx) => {
     const glr = calculateGLR(player);
-    const mins = Math.floor((player.playedSeconds || 0) / 60);
-    const secs = (player.playedSeconds || 0) % 60;
+    const playerSecs = getPlayerPlayedSeconds(player);
+    const mins = Math.floor(playerSecs / 60);
+    const secs = playerSecs % 60;
     const isPriority = idx < 2 && benchPlayers.length > 2;
     const isSelected = (selectedPlayerId === player.id);
 
@@ -814,9 +830,12 @@ function onPitchDrop(e, targetSlotId) {
 
     if (existingPlayer) {
       // Sustitución
+      playerLeavesPitch(existingPlayer);
+      playerEntersPitch(player);
       recordMatchEvent(`🔄 ⬇️ Sale #${existingPlayer.number} ${existingPlayer.name} ➡️ ⬆️ Entra #${player.number} ${player.name}`);
     } else {
       // Entra en puesto vacío
+      playerEntersPitch(player);
       recordMatchEvent(`⬆️ Entra al campo #${player.number} ${player.name}`);
     }
   } else if (source === 'pitch') {
@@ -868,6 +887,7 @@ function onBenchDrop(e) {
     delete lineup[fromSlot];
 
     if (player) {
+      playerLeavesPitch(player);
       recordMatchEvent(`⬇️ Sale al banquillo #${player.number} ${player.name}`);
     }
 
@@ -893,6 +913,8 @@ function handlePlayerPitchClick(playerId, slotId) {
     const outPlayer = squad.find(p => p.id === playerId);
 
     lineup[slotId] = inPlayer.id;
+    playerLeavesPitch(outPlayer);
+    playerEntersPitch(inPlayer);
     recordMatchEvent(`🔄 ⬇️ Sale #${outPlayer.number} ${outPlayer.name} ➡️ ⬆️ Entra #${inPlayer.number} ${inPlayer.name}`);
 
     clearSelection();
@@ -939,6 +961,7 @@ function handleEmptySlotClick(slotId, expectedRole) {
   if (selectedSourceType === 'bench' && selectedPlayerId) {
     const inPlayer = squad.find(p => p.id === selectedPlayerId);
     lineup[slotId] = inPlayer.id;
+    playerEntersPitch(inPlayer);
     recordMatchEvent(`⬆️ Entra al campo #${inPlayer.number} ${inPlayer.name}`);
     clearSelection();
     saveData();
@@ -1094,7 +1117,7 @@ function playRefereeWhistle(type = 'halftime') {
 }
 
 // ------------------------------------------
-// 10. SCREEN WAKE LOCK & CRONÓMETRO CON TIMESTAMP (SIN PARONES AL APAGAR LA PANTALLA)
+// 10. SCREEN WAKE LOCK, HORA REAL ESPAÑA & SEGUNDO PLANO EN MÓVIL
 // ------------------------------------------
 
 // Screen Wake Lock API: Mantiene la pantalla encendida para que el árbitro/entrenador no pierda el tiempo
@@ -1121,129 +1144,217 @@ function releaseWakeLock() {
   }
 }
 
-// Sincronización exacta con el reloj real (timestamp / hora España).
-// Si el móvil se bloquea, se apaga la pantalla o sales de la app,
-// al encender o volver se recuperan exactamente todos los segundos transcurridos.
-function syncTimerWithClock() {
-  if (!isMatchRunning) return;
+// Audio Keepalive para segundo plano real en móvil (iOS Safari / Android Chrome):
+// Al reproducir una pista silenciosa en bucle, el sistema operativo móvil
+// trata a la PWA como un reproductor multimedia y NO duerme el proceso al bloquear la pantalla.
+function ensureSilentAudio() {
+  if (!silentAudioEl) {
+    silentAudioEl = document.createElement('audio');
+    silentAudioEl.id = 'bg-keepalive-audio';
+    silentAudioEl.loop = true;
+    silentAudioEl.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+    document.body.appendChild(silentAudioEl);
+  }
+  return silentAudioEl;
+}
 
-  const now = Date.now();
-  if (!lastTimerTickTimestamp) {
-    lastTimerTickTimestamp = now;
-    return;
+function startBackgroundAudioKeepalive() {
+  try {
+    const audio = ensureSilentAudio();
+    audio.play().catch(() => {});
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Míster Manager F7 - Partido en Vivo',
+        artist: 'Alevín 26/27 (Cronómetro Activo)',
+        album: 'Fútbol 7'
+      });
+      navigator.mediaSession.playbackState = 'playing';
+    }
+  } catch (err) {
+    console.warn("Audio keepalive error:", err);
+  }
+}
+
+function stopBackgroundAudioKeepalive() {
+  try {
+    if (silentAudioEl) {
+      silentAudioEl.pause();
+    }
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
+  } catch (e) {}
+}
+
+// Cálculo infalible del tiempo transcurrido anclado al reloj real (Date.now())
+function getMatchSeconds() {
+  if (isMatchRunning && matchPeriodStartTime) {
+    const elapsed = Math.floor((Date.now() - matchPeriodStartTime) / 1000);
+    return Math.max(0, matchAccumulatedSeconds + elapsed);
+  }
+  return matchAccumulatedSeconds;
+}
+
+// Minutos de juego reales para cada niño
+function getPlayerPlayedSeconds(player) {
+  if (!player) return 0;
+  let secs = player.playedSeconds || 0;
+  if (isMatchRunning && player.activeOnPitchSince) {
+    secs += Math.max(0, Math.floor((Date.now() - player.activeOnPitchSince) / 1000));
+  }
+  return secs;
+}
+
+function playerEntersPitch(player) {
+  if (!player) return;
+  player.activeOnPitchSince = isMatchRunning ? Date.now() : null;
+}
+
+function playerLeavesPitch(player) {
+  if (!player) return;
+  player.playedSeconds = getPlayerPlayedSeconds(player);
+  player.activeOnPitchSince = null;
+}
+
+// Actualización visual y control de avisos sonoros
+function updateTimerDisplay() {
+  const display = document.getElementById('match-timer-display');
+  const clockDisplay = document.getElementById('spain-clock-display');
+  const startBadge = document.getElementById('match-start-time-badge');
+
+  // Hora actual de España
+  if (clockDisplay) {
+    clockDisplay.innerText = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
-  const elapsedMs = now - lastTimerTickTimestamp;
-  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  // Hora de inicio
+  if (startBadge) {
+    if (matchStartClockStr) {
+      startBadge.innerText = `Ini: ${matchStartClockStr}`;
+      startBadge.classList.remove('hidden');
+    } else {
+      startBadge.classList.add('hidden');
+    }
+  }
 
-  if (elapsedSeconds <= 0) return;
+  const currentSeconds = getMatchSeconds();
+  if (display) {
+    const mins = Math.floor(currentSeconds / 60);
+    const secs = currentSeconds % 60;
+    display.innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
 
-  const prevSeconds = matchSeconds;
-  const newSeconds = matchSeconds + elapsedSeconds;
-
-  // Silbato arbitral automático al minuto 35:00 (descanso) o 70:00 (final) si se cruzó en el lapso
-  const t35 = 35 * 60;
-  const t70 = 70 * 60;
-
-  if (matchPeriod === '1T' && prevSeconds < t35 && newSeconds >= t35) {
+  // Comprobar silbato automático a los 35:00 (descanso) o 70:00 (final)
+  if (matchPeriod === '1T' && currentSeconds >= 35 * 60 && !whistlePlayed35) {
+    whistlePlayed35 = true;
     playRefereeWhistle('halftime');
     showToast("⏱️ ¡Minuto 35:00 cumplido! Final de la 1ª Parte (Descanso)", "⏸️");
     recordMatchEvent("⏱️ Min 35:00 cumplido (Fin 1ª Parte)");
-  } else if (matchPeriod === '2T' && prevSeconds < t70 && newSeconds >= t70) {
+    saveData();
+  } else if (matchPeriod === '2T' && currentSeconds >= 70 * 60 && !whistlePlayed70) {
+    whistlePlayed70 = true;
     playRefereeWhistle('fulltime');
     showToast("🏁 ¡Minuto 70:00 cumplido! Final del Partido (2x35m)", "🏁");
     recordMatchEvent("🏁 Min 70:00 cumplido (Fin reglamentario)");
+    saveData();
   }
-
-  // Incrementar segundos de partido
-  matchSeconds = newSeconds;
-
-  // Incrementar segundos jugados solo a los titulares sobre el campo
-  const startingIds = Object.values(lineup);
-  squad.forEach(p => {
-    if (startingIds.includes(p.id) && p.isAvailable !== false) {
-      p.playedSeconds = (p.playedSeconds || 0) + elapsedSeconds;
-    }
-  });
-
-  // Avanzar timestamp exacto del reloj
-  lastTimerTickTimestamp += elapsedSeconds * 1000;
-
-  // Refrescar display y vistas
-  updateTimerDisplay();
-  renderTacticsBoard();
-  renderLiveBench();
-  saveData();
 }
 
 // Manejadores de ciclo de vida del móvil (pantalla apagada / cambio de app / segundo plano)
+function handleAppResume() {
+  updateTimerDisplay();
+  renderTacticsBoard();
+  renderLiveBench();
+  if (isMatchRunning) {
+    requestWakeLock();
+    startBackgroundAudioKeepalive();
+  }
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    if (isMatchRunning) {
-      syncTimerWithClock();
-      requestWakeLock();
-    }
-  } else {
-    if (isMatchRunning) {
-      syncTimerWithClock();
-      saveData();
-    }
+    handleAppResume();
+  } else if (isMatchRunning) {
+    saveData();
   }
 });
 
-window.addEventListener('focus', () => {
-  if (isMatchRunning) syncTimerWithClock();
-});
-
-window.addEventListener('pageshow', () => {
-  if (isMatchRunning) {
-    syncTimerWithClock();
-    requestWakeLock();
-  }
-});
+window.addEventListener('focus', handleAppResume);
+window.addEventListener('pageshow', handleAppResume);
 
 function toggleMatchTimer() {
   const btn = document.getElementById('btn-match-start');
   const btnText = document.getElementById('match-btn-text');
 
   if (isMatchRunning) {
-    // Sincronizar un último cálculo antes de pausar
-    syncTimerWithClock();
+    // PAUSAR: Consolidar acumulado y pausar minutos de jugadores
+    const now = Date.now();
+    if (matchPeriodStartTime) {
+      matchAccumulatedSeconds += Math.floor((now - matchPeriodStartTime) / 1000);
+      matchPeriodStartTime = null;
+    }
+
+    const startingIds = Object.values(lineup);
+    squad.forEach(p => {
+      if (startingIds.includes(p.id)) {
+        playerLeavesPitch(p);
+      }
+    });
+
     clearInterval(matchTimerInterval);
     matchTimerInterval = null;
     isMatchRunning = false;
-    lastTimerTickTimestamp = null;
     releaseWakeLock();
+    stopBackgroundAudioKeepalive();
 
     if (btn) btn.className = 'px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
     if (btnText) btnText.innerText = 'Reanudar';
+
+    updateTimerDisplay();
     renderTacticsBoard();
+    renderLiveBench();
     saveData();
   } else {
+    // INICIAR O REANUDAR
     getAudioContext(); // Desbloquear audio con el gesto del usuario
+    const now = Date.now();
     isMatchRunning = true;
-    lastTimerTickTimestamp = Date.now();
+    matchPeriodStartTime = now;
+
+    if (!matchStartClockStr) {
+      matchStartClockStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const startingIds = Object.values(lineup);
+    squad.forEach(p => {
+      if (startingIds.includes(p.id) && p.isAvailable !== false) {
+        playerEntersPitch(p);
+      }
+    });
+
     requestWakeLock();
+    startBackgroundAudioKeepalive();
 
     if (btn) btn.className = 'px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-lg active:scale-95';
     if (btnText) btnText.innerText = 'Pausar';
 
+    if (matchTimerInterval) clearInterval(matchTimerInterval);
     matchTimerInterval = setInterval(() => {
-      syncTimerWithClock();
+      updateTimerDisplay();
+      if (getMatchSeconds() % 2 === 0) {
+        renderTacticsBoard();
+        renderLiveBench();
+      }
     }, 1000);
 
+    updateTimerDisplay();
+    renderTacticsBoard();
+    renderLiveBench();
     saveData();
   }
 
   if (window.lucide) lucide.createIcons();
-}
-
-function updateTimerDisplay() {
-  const display = document.getElementById('match-timer-display');
-  if (!display) return;
-  const mins = Math.floor(matchSeconds / 60);
-  const secs = matchSeconds % 60;
-  display.innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 function resetMatchTimer() {
@@ -1271,10 +1382,14 @@ function confirmStartNewMatch() {
     matchTimerInterval = null;
   }
   isMatchRunning = false;
-  matchSeconds = 0;
+  matchAccumulatedSeconds = 0;
+  matchPeriodStartTime = null;
+  matchStartClockStr = '';
+  whistlePlayed35 = false;
+  whistlePlayed70 = false;
   matchPeriod = '1T';
-  lastTimerTickTimestamp = null;
   releaseWakeLock();
+  stopBackgroundAudioKeepalive();
 
   // 2. Reiniciar marcador a 0 - 0
   scoreHome = 0;
@@ -1287,6 +1402,7 @@ function confirmStartNewMatch() {
   // 3. Reiniciar minutos jugados de toda la plantilla a 0
   squad.forEach(player => {
     player.playedSeconds = 0;
+    player.activeOnPitchSince = null;
   });
 
   // 4. Opciones de disponibilidad y alineación
@@ -1469,10 +1585,12 @@ function confirmGoal() {
 }
 
 function recordMatchEvent(text) {
-  const mins = Math.floor(matchSeconds / 60);
+  const currentSecs = getMatchSeconds();
+  const mins = Math.floor(currentSecs / 60);
+  const secs = currentSecs % 60;
   matchEvents.unshift({
     min: mins,
-    time: `${String(mins).padStart(2, '0')}:${String(matchSeconds % 60).padStart(2, '0')}`,
+    time: `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
     text: text
   });
   renderMatchEvents();
@@ -1522,10 +1640,10 @@ function promptSubstitute(outPlayerId, slotId) {
   if (subtitle) subtitle.innerText = `Sale: #${outPlayer.number} ${outPlayer.name} (${outPlayer.mainPos})`;
 
   if (list) {
-    availableBench.sort((a, b) => (a.playedSeconds || 0) - (b.playedSeconds || 0));
+    availableBench.sort((a, b) => getPlayerPlayedSeconds(a) - getPlayerPlayedSeconds(b));
 
     list.innerHTML = availableBench.map(p => {
-      const mins = Math.floor((p.playedSeconds || 0) / 60);
+      const mins = Math.floor(getPlayerPlayedSeconds(p) / 60);
       return `
         <div onclick="executeSubstitution('${p.id}')" class="p-3 rounded-xl bg-slate-900 hover:bg-blue-600 border border-fm-border hover:border-blue-400 flex items-center justify-between cursor-pointer transition group">
           <div class="flex items-center gap-3">
@@ -1564,6 +1682,8 @@ function executeSubstitution(inPlayerId) {
 
   if (outPlayer && inPlayer) {
     lineup[pendingOutSlotId] = inPlayer.id;
+    playerLeavesPitch(outPlayer);
+    playerEntersPitch(inPlayer);
     recordMatchEvent(`🔄 ⬇️ #${outPlayer.number} ${outPlayer.name} ➡️ ⬆️ #${inPlayer.number} ${inPlayer.name}`);
     saveData();
     renderTacticsBoard();
@@ -1580,6 +1700,7 @@ function quickBenchEntry(inPlayerId) {
   let freeSlot = formationData.slots.find(s => !lineup[s.id]);
   if (freeSlot) {
     lineup[freeSlot.id] = inPlayerId;
+    playerEntersPitch(inPlayer);
     recordMatchEvent(`⬆️ Entra al campo #${inPlayer.number} ${inPlayer.name}`);
     saveData();
     renderTacticsBoard();
@@ -1608,6 +1729,7 @@ function showBenchForSlot(slotId, expectedRole) {
   });
 
   lineup[slotId] = candidates[0].id;
+  playerEntersPitch(candidates[0]);
   recordMatchEvent(`⬆️ Ocupa puesto #${candidates[0].number} ${candidates[0].name}`);
   saveData();
   renderTacticsBoard();
@@ -1807,15 +1929,16 @@ function setAllAvailable(status) {
 // 12. WHATSAPP: ACTA Y RESUMEN DEL PARTIDO
 // ------------------------------------------
 function copyMatchSummaryForWhatsApp() {
-  const mins = Math.floor(matchSeconds / 60);
+  const currentSecs = getMatchSeconds();
+  const mins = Math.floor(currentSecs / 60);
   let text = `⚽ *ACTA Y RESUMEN DEL PARTIDO - ALEVÍN 26/27 (2 x 35 min)* ⚽\n`;
   text += `🏆 *Marcador:* Alevín ${scoreHome} - ${scoreAway} Rival\n`;
   text += `⏱️ *Tiempo total jugado:* ${mins} minutos\n\n`;
 
   text += `📊 *MINUTOS JUGADOS POR CADA NIÑO:*\n`;
-  const sorted = [...squad].filter(p => p.isAvailable !== false).sort((a,b) => (b.playedSeconds||0) - (a.playedSeconds||0));
+  const sorted = [...squad].filter(p => p.isAvailable !== false).sort((a,b) => getPlayerPlayedSeconds(b) - getPlayerPlayedSeconds(a));
   sorted.forEach(p => {
-    const pMins = Math.floor((p.playedSeconds || 0) / 60);
+    const pMins = Math.floor(getPlayerPlayedSeconds(p) / 60);
     text += `▫️ #${p.number} ${p.name}: *${pMins} min*\n`;
   });
 
@@ -1971,7 +2094,7 @@ function renderSquadTable() {
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Potencia: <b class="text-slate-200">${player.potencia}</b></span>
             <span class="text-slate-400">Mental: <b class="text-slate-200">${player.mental}</b></span>
-            <span class="text-slate-400">Jugado: <b class="text-amber-300">${Math.floor((player.playedSeconds||0)/60)}m</b></span>
+            <span class="text-slate-400">Jugado: <b class="text-amber-300">${Math.floor(getPlayerPlayedSeconds(player)/60)}m</b></span>
           </div>
         </div>
 
