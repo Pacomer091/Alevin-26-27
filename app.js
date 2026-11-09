@@ -368,7 +368,7 @@ let deferredPrompt = null;
 // ------------------------------------------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=5').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=6').then((reg) => {
       reg.update().catch(() => {});
     }).catch((err) => {
       console.log('SW registration error:', err);
@@ -422,12 +422,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Si el partido estaba en marcha, reactivar el contador continuo y el wake lock
   if (isMatchRunning) {
+    const currentMatchSecs = getMatchSeconds();
     const startingIds = Object.values(lineup);
     squad.forEach(p => {
       if (startingIds.includes(p.id) && p.isAvailable !== false) {
-        if (!p.activeOnPitchSince) {
-          p.activeOnPitchSince = matchPeriodStartTime || Date.now();
+        if (p.lastEnteredMatchSecond === null || typeof p.lastEnteredMatchSecond === 'undefined') {
+          p.lastEnteredMatchSecond = currentMatchSecs;
         }
+      } else {
+        p.lastEnteredMatchSecond = null;
       }
     });
 
@@ -488,9 +491,11 @@ function loadData() {
 
   // Asegurar campos esenciales
   squad.forEach(p => {
-    if (typeof p.playedSeconds === 'undefined') p.playedSeconds = 0;
+    if (typeof p.playedSeconds === 'undefined' || typeof p.playedSeconds !== 'number') p.playedSeconds = 0;
+    if (typeof p.lastEnteredMatchSecond === 'undefined') p.lastEnteredMatchSecond = null;
     if (typeof p.isAvailable === 'undefined') p.isAvailable = true;
     if (typeof p.unavailabilityReason === 'undefined') p.unavailabilityReason = '';
+    delete p.activeOnPitchSince;
   });
 
   // Juan Martín Lagos-Díaz: Delantero principal (puede jugar también de medio)
@@ -993,6 +998,8 @@ function handleBenchCardClick(playerId) {
     const inPlayer = squad.find(p => p.id === playerId);
 
     lineup[selectedFromSlotId] = inPlayer.id;
+    playerLeavesPitch(outPlayer);
+    playerEntersPitch(inPlayer);
     recordMatchEvent(`🔄 ⬇️ Sale #${outPlayer.number} ${outPlayer.name} ➡️ ⬆️ Entra #${inPlayer.number} ${inPlayer.name}`);
 
     clearSelection();
@@ -1196,25 +1203,25 @@ function getMatchSeconds() {
   return matchAccumulatedSeconds;
 }
 
-// Minutos de juego reales para cada niño
+// Minutos de juego reales para cada niño - Sincronizados de forma exacta e infalible con el reloj del partido
 function getPlayerPlayedSeconds(player) {
   if (!player) return 0;
   let secs = player.playedSeconds || 0;
-  if (isMatchRunning && player.activeOnPitchSince) {
-    secs += Math.max(0, Math.floor((Date.now() - player.activeOnPitchSince) / 1000));
+  if (isMatchRunning && player.lastEnteredMatchSecond !== null && typeof player.lastEnteredMatchSecond !== 'undefined') {
+    secs += Math.max(0, getMatchSeconds() - player.lastEnteredMatchSecond);
   }
   return secs;
 }
 
 function playerEntersPitch(player) {
   if (!player) return;
-  player.activeOnPitchSince = isMatchRunning ? Date.now() : null;
+  player.lastEnteredMatchSecond = isMatchRunning ? getMatchSeconds() : null;
 }
 
 function playerLeavesPitch(player) {
   if (!player) return;
   player.playedSeconds = getPlayerPlayedSeconds(player);
-  player.activeOnPitchSince = null;
+  player.lastEnteredMatchSecond = null;
 }
 
 // Actualización visual y control de avisos sonoros
@@ -1288,19 +1295,18 @@ function toggleMatchTimer() {
   const btnText = document.getElementById('match-btn-text');
 
   if (isMatchRunning) {
-    // PAUSAR: Consolidar acumulado y pausar minutos de jugadores
+    // PAUSAR:
+    // 1. Consolidar minutos de todos los jugadores que estaban en el campo
+    squad.forEach(p => {
+      playerLeavesPitch(p);
+    });
+
+    // 2. Consolidar acumulado del cronómetro
     const now = Date.now();
     if (matchPeriodStartTime) {
       matchAccumulatedSeconds += Math.floor((now - matchPeriodStartTime) / 1000);
       matchPeriodStartTime = null;
     }
-
-    const startingIds = Object.values(lineup);
-    squad.forEach(p => {
-      if (startingIds.includes(p.id)) {
-        playerLeavesPitch(p);
-      }
-    });
 
     clearInterval(matchTimerInterval);
     matchTimerInterval = null;
@@ -1326,10 +1332,14 @@ function toggleMatchTimer() {
       matchStartClockStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     }
 
+    // Registrar el segundo del partido en que entran los 7 titulares actuales
+    const currentMatchSecs = getMatchSeconds();
     const startingIds = Object.values(lineup);
     squad.forEach(p => {
       if (startingIds.includes(p.id) && p.isAvailable !== false) {
-        playerEntersPitch(p);
+        p.lastEnteredMatchSecond = currentMatchSecs;
+      } else {
+        p.lastEnteredMatchSecond = null;
       }
     });
 
@@ -1402,7 +1412,8 @@ function confirmStartNewMatch() {
   // 3. Reiniciar minutos jugados de toda la plantilla a 0
   squad.forEach(player => {
     player.playedSeconds = 0;
-    player.activeOnPitchSince = null;
+    player.lastEnteredMatchSecond = null;
+    delete player.activeOnPitchSince;
   });
 
   // 4. Opciones de disponibilidad y alineación
@@ -1480,16 +1491,33 @@ function changeMatchPeriod() {
   if (matchPeriod === '1T') {
     if (confirm("¿Pasar al Descanso? Se pausará el tiempo.")) {
       if (isMatchRunning) toggleMatchTimer();
+      // Si el tiempo llegó o pasó de 35m, ajustamos exactamente al minuto 35 (2100s) reglamentario
+      if (matchAccumulatedSeconds >= 35 * 60) {
+        matchAccumulatedSeconds = 35 * 60;
+        squad.forEach(p => {
+          if (p.playedSeconds > 35 * 60) p.playedSeconds = 35 * 60;
+        });
+      }
       matchPeriod = 'DESC';
       recordMatchEvent("⏸️ Fin de la 1ª Parte (Descanso)");
     }
   } else if (matchPeriod === 'DESC') {
     matchPeriod = '2T';
+    // La 2ª parte comienza reglamentariamente a partir del segundo 2100 (35:00)
+    if (matchAccumulatedSeconds < 35 * 60) {
+      matchAccumulatedSeconds = 35 * 60;
+    }
     recordMatchEvent("▶️ Comienza la 2ª Parte");
     if (!isMatchRunning) toggleMatchTimer();
   } else if (matchPeriod === '2T') {
     if (confirm("¿Dar por finalizado el partido?")) {
       if (isMatchRunning) toggleMatchTimer();
+      if (matchAccumulatedSeconds >= 70 * 60) {
+        matchAccumulatedSeconds = 70 * 60;
+        squad.forEach(p => {
+          if (p.playedSeconds > 70 * 60) p.playedSeconds = 70 * 60;
+        });
+      }
       matchPeriod = 'FIN';
       recordMatchEvent("🏁 FINAL DEL PARTIDO");
     }
@@ -1500,6 +1528,9 @@ function changeMatchPeriod() {
     }
   }
   updatePeriodBadge();
+  updateTimerDisplay();
+  renderTacticsBoard();
+  renderLiveBench();
   saveData();
 }
 
@@ -1741,6 +1772,10 @@ function autoFillLineup() {
   const formationData = FORMATIONS[currentFormation];
   if (!formationData) return;
 
+  if (isMatchRunning) {
+    squad.forEach(p => playerLeavesPitch(p));
+  }
+
   lineup = {};
   const available = squad.filter(p => p.isAvailable !== false);
 
@@ -1764,6 +1799,16 @@ function autoFillLineup() {
       lineup[slot.id] = chosen.id;
     }
   });
+
+  if (isMatchRunning) {
+    const currentMatchSecs = getMatchSeconds();
+    const startingIds = Object.values(lineup);
+    squad.forEach(p => {
+      if (startingIds.includes(p.id) && p.isAvailable !== false) {
+        p.lastEnteredMatchSecond = currentMatchSecs;
+      }
+    });
+  }
 
   saveData();
   renderTacticsBoard();
@@ -1890,6 +1935,7 @@ function togglePlayerAvailability(playerId) {
   if (!player.isAvailable) {
     for (const slotId in lineup) {
       if (lineup[slotId] === playerId) {
+        playerLeavesPitch(player);
         delete lineup[slotId];
         recordMatchEvent(`⚠️ Sale por baja #${player.number} ${player.name}`);
       }
@@ -1915,8 +1961,16 @@ function updateUnavailabilityReason(playerId, reason) {
 function setAllAvailable(status) {
   squad.forEach(p => {
     p.isAvailable = status;
-    if (status) p.unavailabilityReason = '';
+    if (status) {
+      p.unavailabilityReason = '';
+    } else {
+      p.unavailabilityReason = 'No disponible';
+      playerLeavesPitch(p);
+    }
   });
+  if (!status) {
+    lineup = {};
+  }
   saveData();
   renderAttendanceList();
   renderTacticsBoard();
@@ -2223,7 +2277,7 @@ function savePlayer(e) {
       id: 'p_' + Date.now(),
       name, number, mainPos, secPositions, foot, roleNote, notes,
       calidad, talento, velocidad, potencia, mental,
-      playedSeconds: 0, isAvailable: true, unavailabilityReason: ''
+      playedSeconds: 0, lastEnteredMatchSecond: null, isAvailable: true, unavailabilityReason: ''
     };
     squad.push(newPlayer);
   }
@@ -2268,6 +2322,7 @@ function deletePlayer(id) {
   if (!player) return;
 
   if (confirm(`¿Seguro que deseas eliminar a ${player.name} de la plantilla?`)) {
+    playerLeavesPitch(player);
     squad = squad.filter(p => p.id !== id);
 
     for (const slotId in lineup) {

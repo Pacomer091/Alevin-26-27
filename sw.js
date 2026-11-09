@@ -1,5 +1,5 @@
 // Service Worker para Míster Manager F7 PWA
-const CACHE_NAME = 'mister-f7-v5';
+const CACHE_NAME = 'mister-f7-v6';
 const STATIC_ASSETS = [
   './',
   './index.html',
